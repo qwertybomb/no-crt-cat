@@ -86,7 +86,7 @@ static void lmemcpy(char *dest, const char *src, DWORD len)
 static void catstdin(void)
 {
 	DWORD chars_read = 0;
-	ReadConsoleA(stdin, input_buffer, 1024 * sizeof(wchar_t), &chars_read, &crc);
+	ReadConsoleA(stdin, input_buffer, 2048, &chars_read, &crc);
 	WriteConsoleA(stdout, input_buffer, chars_read, NULL, NULL);
 }
 
@@ -118,7 +118,9 @@ void __cdecl mainCRTStartup(void)
 	/* setup global variables */
 	stdout = GetStdHandle(STD_OUTPUT_HANDLE);
 	stdin = GetStdHandle(STD_INPUT_HANDLE);
-	input_buffer = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, 1024 * sizeof(wchar_t));
+	input_buffer = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, 2048);
+	output_buffer = HeapAlloc(GetProcessHeap(), 0, 2048);
+	output_capacity = 2048;
 
 	/* get argc and argv */
 	int argc;
@@ -127,7 +129,7 @@ void __cdecl mainCRTStartup(void)
 
 	switch (argc) {
 		case 0:
-			for (;; catstdin());
+			for (;;) catstdin();
 			break;
 		default:
 			for (int i = 0; i < argc; ++i) {
