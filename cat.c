@@ -2,7 +2,6 @@
 
 /* global variables */
 HANDLE stdout = NULL;
-HANDLE stderr = NULL;
 HANDLE stdin = NULL;
 char *input_buffer = NULL;
 CONSOLE_READCONSOLE_CONTROL crc = { .nLength = sizeof(crc),  .dwCtrlWakeupMask = 1 << '\n' };
@@ -196,7 +195,10 @@ static LPSTR *CommandLineToArgvA(_In_opt_ LPCSTR lpCmdLine, _Out_ int *pNumArgs)
 
 static void lmemcpy(char *dest, const char *src, DWORD len)
 {
-    for (; len--;)
+    /* copy 4 bytes at once */
+    for (; len > 3; len -= 4, dest += 4, src += 4)
+        *(long*)dest = *(long*)src;
+    while (len--)
         *dest++ = *src++;
 }
 
@@ -211,7 +213,7 @@ static void catfile(char *filepath)
 {
     HANDLE filehandle = CreateFileA(filepath, GENERIC_READ, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
     if (filehandle == INVALID_HANDLE_VALUE) {
-        WriteConsoleA(stderr, "Error could not open file: ", 27, NULL, NULL);
+        WriteConsoleA(stdout, "Error could not open file: ", 27, NULL, NULL);
         WriteConsoleA(stdout, filepath, lstrlenA(filepath), NULL, NULL);
         ExitProcess(GetLastError());
     }
@@ -234,7 +236,6 @@ void __cdecl mainCRTStartup(void)
 {
 	/* setup global variables */
 	stdout = GetStdHandle(STD_OUTPUT_HANDLE);
-    stderr = GetStdHandle(STD_ERROR_HANDLE);
 	stdin = GetStdHandle(STD_INPUT_HANDLE);
 	input_buffer = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, 1024 * sizeof(wchar_t));
 
@@ -256,6 +257,7 @@ void __cdecl mainCRTStartup(void)
 
 	/* free memory */
     HeapFree(GetProcessHeap(), 0, input_buffer);
+    HeapFree(GetProcessHeap(), 0, output_buffer);
     LocalFree(argv);
 
     /* exit */
