@@ -100,11 +100,10 @@ static void catfile(char *filepath)
 	}
 	DWORD filelength = GetFileSize(filehandle, NULL);
 	if (filelength > output_capacity) { /* see if we need to allocate more memory */
-		char *new_buffer = HeapAlloc(GetProcessHeap(), 0, output_capacity * 2); /* copy the data from the old memory to the new memory */
+		char *new_buffer = HeapAlloc(GetProcessHeap(), 0, filelength * 2); /* copy the data from the old memory to the new memory */
 		lmemcpy(new_buffer, output_buffer, output_capacity);
 		HeapFree(GetProcessHeap(), 0, output_buffer); /* free old memory */
-		output_capacity *= 2;
-		++output_capacity;
+		output_capacity = filelength * 2;
 		output_buffer = new_buffer;
 	}
 
