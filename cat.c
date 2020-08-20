@@ -8,7 +8,7 @@ CONSOLE_READCONSOLE_CONTROL crc = { .nLength = sizeof(crc),  .dwCtrlWakeupMask =
 char *output_buffer = NULL;
 DWORD output_capacity = 0;
 
-/* There is only CommandLineToArgvW so version for ascii is needed */
+/* There is only CommandLineToArgvW so a version for ascii is needed */
 static LPSTR *CommandLineToArgvA(_In_opt_ LPCSTR lpCmdLine, _Out_ int *pNumArgs)
 {
     DWORD argc;
