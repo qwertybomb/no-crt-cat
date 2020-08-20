@@ -9,27 +9,12 @@ char *output_buffer = NULL;
 DWORD output_capacity = 0;
 
 /* There is only CommandLineToArgvW so a version for ascii is needed */
-LPSTR *CommandLineToArgvA(LPSTR lpCmdLine, INT *pNumArgs)
+LPSTR *CommandLineToArgvA(LPWSTR lpWideCmdLine, INT *pNumArgs)
 {
 	int retval;
-	retval = MultiByteToWideChar(CP_ACP, MB_ERR_INVALID_CHARS, lpCmdLine, -1, NULL, 0);
-	if (!SUCCEEDED(retval))
-		return NULL;
-
-	LPWSTR lpWideCharStr = HeapAlloc(GetProcessHeap(), 0, retval * sizeof(WCHAR));
-	if (lpWideCharStr == NULL)
-		return NULL;
-
-	retval = MultiByteToWideChar(CP_ACP, MB_ERR_INVALID_CHARS, lpCmdLine, -1, lpWideCharStr, retval);
-	if (!SUCCEEDED(retval)) {
-		HeapFree(GetProcessHeap(), 0, lpWideCharStr);
-		return NULL;
-	}
-
 	int numArgs;
 	LPWSTR *args;
-	args = CommandLineToArgvW(lpWideCharStr, &numArgs);
-	HeapFree(GetProcessHeap(), 0, lpWideCharStr);
+	args = CommandLineToArgvW(lpWideCmdLine, &numArgs);
 	if (args == NULL)
 		return NULL;
 
@@ -123,7 +108,7 @@ void __cdecl mainCRTStartup(void)
 
 	/* get argc and argv */
 	int argc;
-	char **argv = CommandLineToArgvA(GetCommandLineA(), &argc) + 1;
+	char **argv = CommandLineToArgvA(GetCommandLineW(), &argc) + 1;
 	argc--; /* the first arg is always the program name */
 
 	switch (argc) {
