@@ -2,98 +2,47 @@
 
 /* global variables */
 HANDLE stdout = NULL;
+HANDLE stderr = NULL;
 HANDLE stdin = NULL;
-char *input_buffer = NULL;
-CONSOLE_READCONSOLE_CONTROL crc = { .nLength = sizeof(crc), .dwCtrlWakeupMask = 1 << '\n' };
 char *output_buffer = NULL;
-DWORD output_capacity = 0;
 
-/* There is only CommandLineToArgvW so a version for ascii is needed */
-LPSTR *CommandLineToArgvA(LPWSTR lpWideCmdLine, INT *pNumArgs)
-{
-	int retval;
-	int numArgs;
-	LPWSTR *args;
-	args = CommandLineToArgvW(lpWideCmdLine, &numArgs);
-	if (args == NULL)
-		return NULL;
-
-	int storage = numArgs * sizeof(LPSTR);
-	for (int i = 0; i < numArgs; ++i) {
-		BOOL lpUsedDefaultChar = FALSE;
-		retval = WideCharToMultiByte(CP_ACP, 0, args[i], -1, NULL, 0, NULL, &lpUsedDefaultChar);
-		if (!SUCCEEDED(retval)) {
-			LocalFree(args);
-			return NULL;
-		}
-
-		storage += retval;
-	}
-
-	LPSTR *result = (LPSTR *)LocalAlloc(LMEM_FIXED, storage);
-	if (result == NULL) {
-		LocalFree(args);
-		return NULL;
-	}
-
-	int bufLen = storage - numArgs * sizeof(LPSTR);
-	LPSTR buffer = ((LPSTR)result) + numArgs * sizeof(LPSTR);
-	for (int i = 0; i < numArgs; ++i) {
-		BOOL lpUsedDefaultChar = FALSE;
-		retval = WideCharToMultiByte(CP_ACP, 0, args[i], -1, buffer, bufLen, NULL, &lpUsedDefaultChar);
-		if (!SUCCEEDED(retval)) {
-			LocalFree(result);
-			LocalFree(args);
-			return NULL;
-		}
-
-		result[i] = buffer;
-		buffer += retval;
-		bufLen -= retval;
-	}
-
-	LocalFree(args);
-
-	*pNumArgs = numArgs;
-	return result;
-}
-
-
-static void lmemcpy(char *dest, const char *src, DWORD len)
-{
-	/* copy 4 bytes at once */
-	for (; len > 3; len -= 4, dest += 4, src += 4)
-		*(long *)dest = *(long *)src;
-	while (len--)
-		*dest++ = *src++;
-}
+/* how much of a file to read at once */
+#define chunksize (1 << 16)
 
 static void catstdin(void)
 {
-	DWORD chars_read = 0;
-	ReadConsoleA(stdin, input_buffer, 2048, &chars_read, &crc);
-	WriteConsoleA(stdout, input_buffer, chars_read, NULL, NULL);
+	char ch = 0;
+	DWORD bytes_read = 0;
+	BOOL result = 0;
+
+	/* read till eof or newline */
+	do { 
+		result = !!ReadFile(stdin, &ch, sizeof(ch), &bytes_read, NULL);
+		result &= !!WriteFile(stdout, &ch, bytes_read, NULL, NULL);
+	} while (result && bytes_read != 0 && ch != '\n');
 }
 
-static void catfile(char *filepath)
+static void catfile(wchar_t *filepath)
 {
-	HANDLE filehandle = CreateFileA(filepath, GENERIC_READ, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+	HANDLE filehandle = CreateFileW(filepath, GENERIC_READ, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
 	if (filehandle == INVALID_HANDLE_VALUE) {
-		WriteConsoleA(stdout, "Error could not open file: ", 27, NULL, NULL);
-		WriteConsoleA(stdout, filepath, lstrlenA(filepath), NULL, NULL);
+		/* set console to red text */
+		SetConsoleTextAttribute(stderr, FOREGROUND_RED);
+		WriteFile(stderr, "Error: could not open ", 22, NULL, NULL);
+		WriteFile(stderr, filepath, lstrlenW(filepath) * sizeof(wchar_t), NULL, NULL);
+		/* set console color back to white */
+		SetConsoleTextAttribute(stderr, FOREGROUND_GREEN | FOREGROUND_BLUE | FOREGROUND_RED);
 		ExitProcess(GetLastError());
 	}
 	DWORD filelength = GetFileSize(filehandle, NULL);
-	if (filelength > output_capacity) { /* see if we need to allocate more memory */
-		char *new_buffer = HeapAlloc(GetProcessHeap(), 0, filelength * 2); /* copy the data from the old memory to the new memory */
-		lmemcpy(new_buffer, output_buffer, output_capacity);
-		HeapFree(GetProcessHeap(), 0, output_buffer); /* free old memory */
-		output_capacity = filelength * 2;
-		output_buffer = new_buffer;
+	DWORD bytes_read = 1;
+	
+	/* read the file in chunks */
+	while (bytes_read != 0) {
+		ReadFile(filehandle, output_buffer, chunksize, &bytes_read, NULL);
+		WriteFile(stdout, output_buffer, bytes_read, NULL, NULL);
 	}
 
-	ReadFile(filehandle, output_buffer, filelength, NULL, NULL);
-	WriteConsoleA(stdout, output_buffer, filelength, NULL, NULL);
 	CloseHandle(filehandle); /* close file */
 }
 
@@ -101,14 +50,14 @@ void __cdecl mainCRTStartup(void)
 {
 	/* setup global variables */
 	stdout = GetStdHandle(STD_OUTPUT_HANDLE);
+	stderr = GetStdHandle(STD_ERROR_HANDLE);
 	stdin = GetStdHandle(STD_INPUT_HANDLE);
-	input_buffer = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, 2048);
-	output_buffer = HeapAlloc(GetProcessHeap(), 0, 2048);
-	output_capacity = 2048;
+	output_buffer = HeapAlloc(GetProcessHeap(), 0, chunksize);
 
+	
 	/* get argc and argv */
 	int argc;
-	char **argv = CommandLineToArgvA(GetCommandLineW(), &argc) + 1;
+	wchar_t **argv = CommandLineToArgvW(GetCommandLineW(), &argc) + 1;
 	argc--; /* the first arg is always the program name */
 
 	switch (argc) {
@@ -117,7 +66,7 @@ void __cdecl mainCRTStartup(void)
 			break;
 		default:
 			for (int i = 0; i < argc; ++i) {
-				if (!lstrcmpA(argv[i], "-"))
+				if (!lstrcmpW(argv[i], L"-"))
 					catstdin();
 				else
 					catfile(argv[i]);
@@ -125,7 +74,6 @@ void __cdecl mainCRTStartup(void)
 	}
 
 	/* free memory */
-	HeapFree(GetProcessHeap(), 0, input_buffer);
 	HeapFree(GetProcessHeap(), 0, output_buffer);
 	LocalFree(argv);
 
