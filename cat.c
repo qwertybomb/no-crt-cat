@@ -34,7 +34,6 @@ static void catfile(wchar_t *filepath)
 		SetConsoleTextAttribute(stderr, FOREGROUND_GREEN | FOREGROUND_BLUE | FOREGROUND_RED);
 		ExitProcess(GetLastError());
 	}
-	DWORD filelength = GetFileSize(filehandle, NULL);
 	DWORD bytes_read = 1;
 	BOOL result = 1;
 
