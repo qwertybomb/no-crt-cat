@@ -29,18 +29,19 @@ static void catfile(wchar_t *filepath)
 		/* set console to red text */
 		SetConsoleTextAttribute(stderr, FOREGROUND_RED);
 		WriteFile(stderr, "Error: could not open ", 22, NULL, NULL);
-		WriteFile(stderr, filepath, lstrlenW(filepath) * sizeof(wchar_t), NULL, NULL);
+		while (*filepath) WriteFile(stderr, filepath++, 1, NULL, NULL);
 		/* set console color back to white */
 		SetConsoleTextAttribute(stderr, FOREGROUND_GREEN | FOREGROUND_BLUE | FOREGROUND_RED);
 		ExitProcess(GetLastError());
 	}
 	DWORD filelength = GetFileSize(filehandle, NULL);
 	DWORD bytes_read = 1;
-	
+	BOOL result = 1;
+
 	/* read the file in chunks */
-	while (bytes_read != 0) {
-		ReadFile(filehandle, output_buffer, chunksize, &bytes_read, NULL);
-		WriteFile(stdout, output_buffer, bytes_read, NULL, NULL);
+	while (result && bytes_read != 0) {
+		result = !!ReadFile(filehandle, output_buffer, chunksize, &bytes_read, NULL);
+		result &= !!WriteFile(stdout, output_buffer, bytes_read, NULL, NULL);
 	}
 
 	CloseHandle(filehandle); /* close file */
