@@ -10,7 +10,7 @@ enum { chunksize = 1 << 16	 };
 
 static void catstdin(void)
 {
-	char ch = '\n';
+	char ch = 0;
 	DWORD bytes_read = 0;
 
 	/* read till eof or newline */
