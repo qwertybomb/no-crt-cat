@@ -1,46 +1,64 @@
 #include <windows.h>
 
-/* global variables */
-HANDLE stdout = NULL;
-HANDLE stderr = NULL;
-HANDLE stdin = NULL;
-char *output_buffer = NULL;
+#define nullptr (0)
+HANDLE stdout = nullptr;
+HANDLE stderr = nullptr;
+HANDLE stdin = nullptr;
 
 /* how much of a file to read at once */
-#define chunksize (1 << 16)
+enum { chunksize = 1 << 16	 };
 
 static void catstdin(void)
 {
-	char ch = 0;
+	char ch = '\n';
 	DWORD bytes_read = 0;
-	BOOL result = 0;
 
 	/* read till eof or newline */
-	do { 
-		result = !!ReadFile(stdin, &ch, sizeof(ch), &bytes_read, NULL);
-		result &= !!WriteFile(stdout, &ch, bytes_read, NULL, NULL);
-	} while (result && bytes_read != 0 && ch != '\n');
+	do {
+		if (ReadFile(stdin, &ch, sizeof(ch), &bytes_read, nullptr) == 0) {
+			WriteFile(stderr, "Error: could not read stdin", 27, nullptr, nullptr);
+			ExitProcess(GetLastError());
+		}
+		
+		if (WriteFile(stdout, &ch, bytes_read, nullptr, nullptr) == 0) {
+			WriteFile(stderr, "Error: could not write to stdout", 32, nullptr, nullptr);
+			ExitProcess(GetLastError());
+		}
+	} while (bytes_read != 0 && ch != '\n');
 }
 
 static void catfile(wchar_t *filepath)
 {
-	HANDLE filehandle = CreateFileW(filepath, GENERIC_READ, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+	HANDLE filehandle = CreateFileW(filepath, GENERIC_READ, 0, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
 	if (filehandle == INVALID_HANDLE_VALUE) {
 		/* set console to red text */
 		SetConsoleTextAttribute(stderr, FOREGROUND_RED);
-		WriteFile(stderr, "Error: could not open ", 22, NULL, NULL);
-		while (*filepath) WriteFile(stderr, filepath++, 1, NULL, NULL);
+
+		/* write error message */
+		WriteConsoleA(stderr, "Error: could not open ", 22, nullptr, nullptr);
+		WriteConsoleW(stderr, filepath, lstrlenW(filepath) , nullptr, nullptr);
+		
 		/* set console color back to white */
 		SetConsoleTextAttribute(stderr, FOREGROUND_GREEN | FOREGROUND_BLUE | FOREGROUND_RED);
 		ExitProcess(GetLastError());
 	}
+
 	DWORD bytes_read = 1;
-	BOOL result = 1;
+	char output_buffer[chunksize];
 
 	/* read the file in chunks */
-	while (result && bytes_read != 0) {
-		result = !!ReadFile(filehandle, output_buffer, chunksize, &bytes_read, NULL);
-		result &= !!WriteFile(stdout, output_buffer, bytes_read, NULL, NULL);
+	while (bytes_read != 0) {
+		if (ReadFile(filehandle, output_buffer, chunksize, &bytes_read, nullptr) == 0) {
+			WriteConsoleA(stderr, "Error: could not read ", 22, nullptr, nullptr);
+			WriteConsoleW(stderr, filepath, lstrlenW(filepath), nullptr, nullptr);
+			ExitProcess(GetLastError());
+		}
+
+		if (WriteFile(stdout, output_buffer, bytes_read, nullptr, nullptr) == 0) {
+			WriteConsoleA(stderr, "Error: could not write to ", 26, nullptr, nullptr);
+			WriteConsoleW(stderr, filepath, lstrlenW(filepath), nullptr, nullptr);
+			ExitProcess(GetLastError());
+		}
 	}
 
 	CloseHandle(filehandle); /* close file */
@@ -52,9 +70,7 @@ void __cdecl mainCRTStartup(void)
 	stdout = GetStdHandle(STD_OUTPUT_HANDLE);
 	stderr = GetStdHandle(STD_ERROR_HANDLE);
 	stdin = GetStdHandle(STD_INPUT_HANDLE);
-	output_buffer = HeapAlloc(GetProcessHeap(), 0, chunksize);
 
-	
 	/* get argc and argv */
 	int argc;
 	wchar_t **argv = CommandLineToArgvW(GetCommandLineW(), &argc) + 1;
@@ -72,11 +88,7 @@ void __cdecl mainCRTStartup(void)
 					catfile(argv[i]);
 			}
 	}
+	LocalFree(argv - 1);
 
-	/* free memory */
-	HeapFree(GetProcessHeap(), 0, output_buffer);
-	LocalFree(argv);
-
-	/* exit */
-	ExitProcess(0);
+	ExitProcess(GetLastError());
 }
